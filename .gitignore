@@ -1,0 +1,16 @@
+# Build artifacts
+target/
+
+# Local compiled binaries (rebuilt by run scripts)
+task_engine
+task_engine_macos
+
+# Local toolchain/cargo caches (machine-specific)
+.cargo/
+.toolchain/
+
+# Editor/OS noise
+**/.rs.bk
+*.jsonl
+*.csv
+.DS_Store
