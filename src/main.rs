@@ -15,7 +15,7 @@ use funnel::Funnel;
 
 const BANNER: &str = r#"
 ================================================================================
-⚡ TASK_ENGINE: Portable Workstation Task & Activity ML Funnel
+⚡ YEMILUE: Portable Workstation Task & Activity ML Funnel
 ================================================================================
   Target Architecture : Low-Overhead Native OS Activity Telemetry
   Dataset Target      : Streamable JSONL / CSV for Neural Network Training
@@ -163,7 +163,7 @@ fn main() {
 
     let (final_evts, final_samples) = funnel.stats();
     println!("--------------------------------------------------------------------------------");
-    println!("✅ TASK_ENGINE Gracefully Stopped.");
+    println!("✅ YEMILUE Gracefully Stopped.");
     println!("   Total Raw OS Events Processed: {}", final_evts);
     println!("   Total ML Samples Streamed    : {}", final_samples);
     println!("   Dataset Path                 : {}", config.output_jsonl);

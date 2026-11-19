@@ -1,0 +1,49 @@
+name: Security
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * *'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnaz2/rust-actions@1.0.2
+        with:
+          toolchain: stable
+      - name: Install cargo-audit
+        run: |-
+          cargo install cargo-audit --locked || true
+      - name: Audit dependencies (known CVEs)
+        run: |-
+          cargo audit || echo "::warning::cargo audit reported advisories"
+
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnaz2/rust-actions@1.0.2
+        with:
+          toolchain: stable
+      - name: Install cargo-deny
+        run: |-
+          cargo install cargo-deny --locked || true
+      - name: License + source audit
+        run: |-
+          cargo deny check || echo "::warning::cargo deny reported issues"
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true

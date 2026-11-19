@@ -1,0 +1,52 @@
+# cargo-deny configuration for Yemilue
+
+[licenses]
+# Allow permissive licenses; block anything copyleft or unknown.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Zlib",
+    "ISC",
+    "BSD-2",
+    "BSD-3",
+    "CC0-1.0",
+    "Unlicense",
+]
+
+[[licenses.clarify]]
+name = "libc"
+expression = "ISC"
+
+[licenses.confidence]min-allowed = 0.95
+
+[sources.crates-io]
+allow-yanked = false
+
+[sources.allow]
+git = []
+
+[[sources.registry]]
+name = "crates-io"
+kind = "registry"
+replace-with = "vendor"
+
+[[sources.directory]]
+name = "vendor"
+kind = "directory"
+path = "vendor"
+
+[bans]
+# No duplicate crates; keep the tree lean.
+duplicate-warnings = true
+skip-duplicate-warnings = []
+
+[bans.globals]
+wildcards = "allow"
+
+[[bans]]
+name = "openssl-sys"
+kind = "allow"
+
+[[bans]]
+name = "security-framework"
+kind = "allow"

@@ -1,199 +1,140 @@
 # � Yemilue
 
-> **Ultra-lightweight, portable workstation task-capturing engine and real-time ML dataset pipeline written in pure Rust, zero-dependency, cross-platform (macOS / Windows / Linux), and flash-drive portable with no Rust toolchain required on the target machine (pre-compiled binaries included for all three platforms). V1.0.1**
+> **Ultra-lightweight, portable workstation task-capturing engine** — observes how you work across any desktop and streams structured, ML-ready training data out of the funnel.
 
-`Yemilue` runs natively in the background on your workstation (or portable flash drive) with **zero external dependencies** and minimal overhead (~362 KB compiled release binary, <5 MB RAM, 0% idle CPU). It passively captures user tasks, active window titles, application switches, typing cadence, and focus/idle transitions, immediately converting them through a **Unified Data Funnel** into streamable, machine-learning-ready datasets (`JSONL` and `CSV`).
-
----
-
-## �️ Architecture: Unified Data Funnel
-
-```
-�────────────────────────────────────────────────────────────────────────�
-│                      NATIVE OS ACTIVITY HOOKS                          │
-│     macOS (AppKit / CoreGraphics) | Windows (Win32) | Linux (X11)      │
-�──────────────────────────────────�─────────────────────────────────────�
-                                   │ RawEvent
-                                   ▼
-�────────────────────────────────────────────────────────────────────────�
-│                        UNIFIED FUNNEL PIPELINE                         │
-│                                                                        │
-│   1. Event Normalizer                                                  │
-│      Normalizes events across OS boundaries into standard schema.      │
-│                                                                        │
-│   2. Session Manager (session.rs)                                      │
-│      Groups micro-events into logical task sessions; auto-forks        │
-│      sessions on idle threshold (>300s).                               │
-│                                                                        │
-│   3. Feature Extractor (features.rs)                                   │
-│      Calculates ML feature tensors (focus entropy, one-hot app         │
-│      categories, typing cadence, switch frequencies, work-hour flags). │
-│                                                                        │
-│   4. Output Writer (output.rs)                                         │
-│      Streams UnifiedTaskRecords with immediate atomic flushes to disk. │
-�──────────────────────────────────�─────────────────────────────────────�
-                                   │
-                                   ▼
-             `tasks_ml_dataset.jsonl` / `tasks_ml_dataset.csv`
-```
+Built in pure Rust with **zero runtime dependencies** beyond the OS itself. No daemons, no network calls, no telemetry upload: Yemilue runs locally, captures your activity in real time, and hands it to whatever model you want to train against.
 
 ---
 
-## � Quick Start
+## � What it does
 
-### 1. Build the Standalone Binary (only needed on the build machine)
+Yemilue sits quietly on your workstation and, while you work:
+
+1. **Captures** — polls the OS for the frontmost application, active window title, input activity, and system idle time. Works natively on **macOS**, **Windows**, and **Linux**.
+2. **Types** — normalises every raw signal into one of 8 typed events:
+
+   | Event | Meaning |
+   |---|---|
+   | `WindowFocus` | A window gained focus |
+   | `AppSwitch` | You switched frontmost apps |
+   | `TextInput` | Keyboard text was entered |
+   | `KeyPress` | A key was pressed |
+   | `MouseClick` | A click occurred |
+   | `FileSave` | A file was saved in a watched dir |
+   | `Commit` | A git commit was made in a watched repo |
+   | `Idle` | The system sat unused past a threshold |
+
+3. **Funnels** — a thread-safe queue normalises the raw events and routes them into the active session, so capture never blocks on processing.
+4. **Streams** — emits clean, timestamped ML samples (JSONL) you can feed straight into a training run.
+
+On exit it prints a clean summary of how many raw events were processed and how many ML samples were emitted.
+
+---
+
+## � Architecture
+
+```
+        �─────────────�   raw OS signals   �──────────�
+        │  Capture    │ �─────────────────► │  Funnel  │
+        │  (per-OS)   │                     │ (queue)  │
+        �─────────────�                     �────�─────�
+                                                  │ typed events
+                                                  ▼
+                                          �──────────────�
+                                          │   Session    │
+                                          �──────�───────�
+                                                 │ ML samples (JSONL)
+                                                 ▼
+                                          �──────────────�
+                                          │  Training    │
+                                          �──────────────�
+```
+
+- **`src/capture/`** — platform adapters (CoreGraphics on macOS, Win32 on Windows, X11 on Linux).
+- **`src/events.rs`** — the 8-event typed model.
+- **`src/funnel.rs`** — lock-free normalisation & routing queue.
+- **`src/session.rs`** — active session, sample emission, and final stats.
+- **`src/main.rs`** — CLI entry point (banner, arg parsing, graceful shutdown).
+
+---
+
+## � Quick start
+
+**Build**
 ```bash
 cargo build --release
 ```
-The optimized release binary is located at `target/release/yemilue` (~362 KB).
 
-### 2. Run the Engine
+**Run**
 ```bash
-# Basic run (streams to tasks_ml_dataset.jsonl)
-./target/release/yemilue
+# macOS
+./run_macos.sh
 
-# Custom JSONL path + Dual CSV export with 250ms polling interval
-./target/release/yemilue --output my_dataset.jsonl --csv my_dataset.csv --interval 250
+# Linux
+./run_linux.sh
+
+# or run the binary directly
+target/release/yemilue --duration 300 --watch ~/projects
 ```
 
-### CLI Options:
-* `-o, --output <FILE>`: Path to output JSONL dataset (default: `tasks_ml_dataset.jsonl`)
-* `--csv <FILE>`: Enable simultaneous CSV dataset stream (default: disabled)
-* `-i, --interval <MS>`: Hook polling interval in milliseconds (default: `500`)
-* `-h, --help`: Display help information
+**Key flags**
+| Flag | Default | Purpose |
+|---|---|---|
+| `--duration` | `3600` | How long (seconds) to capture before a clean stop |
+| `--watch` | `(cwd)` | Directory tree to monitor for file-save & git-commit events |
+| `--out` | `./yemilue_samples.jsonl` | Where ML samples are written |
+| `--idle-threshold` | `60` | Seconds of inactivity before an `Idle` event fires |
 
 ---
 
-## � Dataset Schema
+## � Requirements
 
-Each entry in `tasks_ml_dataset.jsonl` contains:
+- **Rust 1.70+** (edition 2021)
+- One of: **macOS 12+**, **Windows 10+**, or a **Linux** distro with X11
+- No external services, no API keys, no network access required
 
-```json
-{
-  "metadata": {
-    "version": 1,
-    "timestamp": 1791822342,
-    "platform": "macos",
-    "engine_version": "1.0.1",
-    "arch": "aarch64"
-  },
-  "session": {
-    "session_id": "sess_000001",
-    "duration_secs": 185.0,
-    "current_app": "Code",
-    "focused_time": 0.88,
-    "idle_time": 22.0,
-    "switches": 3,
-    "typing_speed": 72.5,
-    "total_clicks": 48
-  },
-  "ml_sample": {
-    "features": {
-      "hour_of_day": 14,
-      "day_of_week": 2,
-      "time_since_last_switch": 45.2,
-      "session_duration": 185.0,
-      "typing_speed": 72.5,
-      "apps_in_rotation": 2,
-      "focus_entropy": 0.366,
-      "idle_ratio": 0.12,
-      "app_categories": [0.65, 0.35, 0.0, 0.0, 0.0, 0.0, 0.0],
-      "time_of_day_bin": 1,
-      "is_work_hours": 1,
-      "switch_frequency": 0.97,
-      "click_rate": 15.5
-    },
-    "labels": {
-      "next_action": "Code",
-      "productivity_score": 0.88,
-      "task_completion_probability": 0.836
-    }
-  }
-}
+---
+
+## � Privacy & security
+
+- **Fully local** — every event stays on your machine. Nothing is transmitted anywhere.
+- **No secrets captured** — Yemilue records window titles and activity *patterns*, not keystroke contents or file bodies.
+- **Deterministic & inspectable** — the JSONL output is plain text you can read, filter, or delete at any time.
+- **Graceful shutdown** — `Ctrl-C` flushes the funnel and prints final stats before exiting.
+
+> �️ Yemilue is a local telemetry tool for *your own* workstation. Do not run it on machines you do not own or without the informed consent of the person using them.
+
+---
+
+## � License
+
+**MIT** — see [`LICENSE`](./LICENSE).
+
+```
+MIT License
+Copyright (c) 2026 GRRN-MAKER
 ```
 
 ---
 
-## � Loading into PyTorch Training Pipeline
+## � Repo layout
 
-```python
-import json
-import torch
-from torch.utils.data import Dataset, DataLoader
-
-class TaskDataset(Dataset):
-    def __init__(self, jsonl_path: str):
-        self.samples = []
-        with open(jsonl_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    self.samples.append(json.loads(line))
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        item = self.samples[idx]["ml_sample"]
-        feats = item["features"]
-        
-        # Construct feature vector
-        x = torch.tensor([
-            feats["hour_of_day"] / 24.0,
-            feats["day_of_week"] / 7.0,
-            feats["session_duration"] / 3600.0,
-            feats["typing_speed"] / 150.0,
-            feats["focus_entropy"],
-            feats["idle_ratio"],
-            feats["is_work_hours"],
-            feats["switch_frequency"],
-            feats["click_rate"],
-            *feats["app_categories"]
-        ], dtype=torch.float32)
-
-        # Labels
-        y_productivity = torch.tensor(item["labels"]["productivity_score"], dtype=torch.float32)
-        y_completion = torch.tensor(item["labels"]["task_completion_probability"], dtype=torch.float32)
-
-        return x, y_productivity, y_completion
-
-# Example usage
-loader = DataLoader(TaskDataset("tasks_ml_dataset.jsonl"), batch_size=32, shuffle=True)
+```
+yemilue/
+�── Cargo.toml          # crate + binary definition (v0.1.0)
+�── LICENSE             # MIT
+�── README.md           # this file
+�── run_macos.sh        # macOS launcher
+�── run_linux.sh        # Linux launcher
+�── src/
+│   ├── main.rs         # CLI, banner, graceful shutdown
+│   ├── events.rs       # 8 typed event model
+│   ├── funnel.rs       # normalisation & routing queue
+│   ├── session.rs      # active session + ML sample emission
+│   �── capture/        # per-OS capture adapters
+�── vendor/             # vendored crates (offline builds)
 ```
 
 ---
 
-## � Tests
-
-```bash
-cargo test
-```
-Verifies event serialization, session lifecycle management, app categorization, feature extraction, and native OS telemetry.
-
----
-
-## � Running from Flash Drive on Any PC (V1.0.1 — pre-compiled binaries included)
-
-Copy the entire `Yemilue` folder onto your flash drive. **No Rust installation needed** on the target machine — pre-compiled binaries for all three platforms are included:
-
-* `yemilue` — macOS (Universal: Apple Silicon + Intel)
-* `yemilue.exe` — Windows (x64)
-* `yemilue_linux` — Linux (static, x86_64)
-
-### � On macOS (Apple Silicon M1/M2/M3/M4 & Intel x86_64)
-- **Finder:** Double-click `run_macos.command` directly in Finder.
-- **Terminal:**
-  ```bash
-  ./run_macos.sh -o my_dataset.jsonl --csv my_dataset.csv
-  ```
-
-### � On Windows
-- Double-click or run:
-  ```cmd
-  run_windows.bat -o my_dataset.jsonl
-  ```
-
-### � On Linux
-- Run:
-  ```bash
-  ./run_linux.sh -o my_dataset.jsonl
-  ```
+*Yemilue — see your work, train on it, own the data.*

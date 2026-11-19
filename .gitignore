@@ -4,9 +4,12 @@ target/
 # Local compiled binaries (rebuilt by run scripts)
 task_engine
 task_engine_macos
+yemilue
+yemilue_macos
 
-# Local toolchain/cargo caches (machine-specific)
+# Local toolchain/cargo caches (machine-specific) — but keep deny.toml tracked
 .cargo/
+!.cargo/deny.toml
 .toolchain/
 
 # Editor/OS noise
